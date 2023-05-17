@@ -58,13 +58,13 @@ static int ili9341_probe(struct spi_device *client)
     spi_set_drvdata(client, dev_data);
     dev_data->client = client;
 
-    if (!device_property_present(&client->dev, DC_GPIO_OF_NAME))
+    if (!device_property_present(&client->dev, "dc-gpios"))
     {
-        dev_err(&client->dev, "device tree property: %s does not exist\n", DC_GPIO_OF_NAME);
+        dev_err(&client->dev, "device tree property dc-gpios does not exist\n");
         return -EINVAL;
     }
 
-    dev_data->dc_gpio = gpiod_get(&client->dev, DC_GPIO_OF_NAME, GPIOD_ASIS);
+    dev_data->dc_gpio = gpiod_get(&client->dev, "dc", GPIOD_OUT_HIGH);
     if (IS_ERR(dev_data->dc_gpio))
     {
         dev_err(&client->dev, "could not setup dc gpio\n");

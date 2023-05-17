@@ -6,8 +6,6 @@
 #include <linux/spi/spi.h>
 #include <linux/gpio/consumer.h>
 
-#define DC_GPIO_OF_NAME "dc-gpios"
-
 struct device_data
 {
     struct spi_device *client;
