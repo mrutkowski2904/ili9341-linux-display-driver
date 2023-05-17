@@ -1,10 +1,12 @@
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 #include <linux/of.h>
+#include <linux/delay.h>
 
 #include "ili9341.h"
 #include "display.h"
 
+static int display_thread(void *data);
 static int ili9341_probe(struct spi_device *client);
 static void ili9341_remove(struct spi_device *client);
 
@@ -16,14 +18,36 @@ static struct of_device_id ili9341_driver_of_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, ili9341_driver_of_ids);
 
+static struct spi_device_id ili9341_ids[] = {
+    {"custom_ili9341", 0},
+    {/* NULL */},
+};
+MODULE_DEVICE_TABLE(spi, ili9341_ids);
+
 static struct spi_driver ili9341_spi_driver = {
     .probe = ili9341_probe,
     .remove = ili9341_remove,
     .driver = {
-        .name = "ili9341",
+        .name = "custom_ili9341",
         .of_match_table = of_match_ptr(ili9341_driver_of_ids),
     },
 };
+
+static int display_thread(void *data)
+{
+    struct device_data *dev_data;
+    dev_data = data;
+
+    while (!kthread_should_stop())
+    {
+        msleep(600);
+        dev_info(&dev_data->client->dev, "display thread!\n");
+        gpiod_set_value(dev_data->dc_gpio, 1);
+        msleep(600);
+        gpiod_set_value(dev_data->dc_gpio, 0);
+    }
+    return 0;
+}
 
 static int ili9341_probe(struct spi_device *client)
 {
@@ -31,14 +55,39 @@ static int ili9341_probe(struct spi_device *client)
     dev_data = devm_kzalloc(&client->dev, sizeof(struct device_data), GFP_KERNEL);
     if (!dev_data)
         return -ENOMEM;
+    spi_set_drvdata(client, dev_data);
+    dev_data->client = client;
 
-    dev_info(&client->dev, "ili9341 probe called\n");
+    if (!device_property_present(&client->dev, DC_GPIO_OF_NAME))
+    {
+        dev_err(&client->dev, "device tree property: %s does not exist\n", DC_GPIO_OF_NAME);
+        return -EINVAL;
+    }
+
+    dev_data->dc_gpio = gpiod_get(&client->dev, DC_GPIO_OF_NAME, GPIOD_ASIS);
+    if (IS_ERR(dev_data->dc_gpio))
+    {
+        dev_err(&client->dev, "could not setup dc gpio\n");
+        return PTR_ERR(dev_data->dc_gpio);
+    }
+
+    dev_data->display_thread = kthread_create(display_thread, dev_data, "ili9341_kthread");
+    if (!dev_data->display_thread)
+        return -ECHILD;
+
+    wake_up_process(dev_data->display_thread);
+    dev_info(&client->dev, "probe successful\n");
     return 0;
 }
 
 static void ili9341_remove(struct spi_device *client)
 {
-    dev_info(&client->dev, "ili9341 remove\n");
+    struct device_data *dev_data;
+    dev_data = spi_get_drvdata(client);
+
+    kthread_stop(dev_data->display_thread);
+    gpiod_put(dev_data->dc_gpio);
+    dev_info(&client->dev, "device removed\n");
 }
 
 module_spi_driver(ili9341_spi_driver);

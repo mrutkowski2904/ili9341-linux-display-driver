@@ -3,10 +3,16 @@
 
 #include <linux/types.h>
 #include <linux/kthread.h>
+#include <linux/spi/spi.h>
+#include <linux/gpio/consumer.h>
+
+#define DC_GPIO_OF_NAME "dc-gpios"
 
 struct device_data
 {
+    struct spi_device *client;
     struct task_struct *display_thread;
+    struct gpio_desc *dc_gpio;
 };
 
 #endif /* _ILI9341_H */
