@@ -41,16 +41,13 @@ static int display_thread(void *data)
     while (!kthread_should_stop())
     {
         msleep(600);
-        dev_info(&dev_data->client->dev, "display thread!\n");
-        gpiod_set_value(dev_data->dc_gpio, 1);
-        msleep(600);
-        gpiod_set_value(dev_data->dc_gpio, 0);
     }
     return 0;
 }
 
 static int ili9341_probe(struct spi_device *client)
 {
+    int status;
     struct device_data *dev_data;
     dev_data = devm_kzalloc(&client->dev, sizeof(struct device_data), GFP_KERNEL);
     if (!dev_data)
@@ -69,6 +66,13 @@ static int ili9341_probe(struct spi_device *client)
     {
         dev_err(&client->dev, "could not setup dc gpio\n");
         return PTR_ERR(dev_data->dc_gpio);
+    }
+
+    status = ili9341_init(dev_data);
+    if(status)
+    {
+        dev_err(&client->dev, "error while initialising display hardware\n");
+        return status;
     }
 
     dev_data->display_thread = kthread_create(display_thread, dev_data, "ili9341_kthread");
