@@ -2,6 +2,7 @@
 #include <linux/spi/spi.h>
 #include <linux/of.h>
 #include <linux/delay.h>
+#include <linux/fb.h>
 
 #include "ili9341.h"
 #include "display.h"
@@ -33,6 +34,13 @@ static struct spi_driver ili9341_spi_driver = {
     },
 };
 
+static struct fb_ops ili9341_fb_ops = {
+    .owner = THIS_MODULE,
+    .fb_fillrect = cfb_fillrect,
+    .fb_imageblit = cfb_imageblit,
+    .fb_copyarea = cfb_copyarea,
+};
+
 static int display_thread(void *data)
 {
     struct device_data *dev_data;
@@ -40,7 +48,12 @@ static int display_thread(void *data)
 
     while (!kthread_should_stop())
     {
-        msleep(600);
+        msleep(700);
+        if (ili9341_send_display_buff(dev_data))
+        {
+            dev_err(&dev_data->client->dev, "error occured while sending data to the display");
+            break;
+        }
     }
     return 0;
 }
@@ -49,17 +62,23 @@ static int ili9341_probe(struct spi_device *client)
 {
     int status;
     struct device_data *dev_data;
-    dev_data = devm_kzalloc(&client->dev, sizeof(struct device_data), GFP_KERNEL);
-    if (!dev_data)
-        return -ENOMEM;
-    spi_set_drvdata(client, dev_data);
-    dev_data->client = client;
 
     if (!device_property_present(&client->dev, "dc-gpios"))
     {
         dev_err(&client->dev, "device tree property dc-gpios does not exist\n");
         return -EINVAL;
     }
+
+    dev_data = devm_kzalloc(&client->dev, sizeof(struct device_data), GFP_KERNEL);
+    if (!dev_data)
+        return -ENOMEM;
+
+    dev_data->display_buff = devm_kzalloc(&client->dev, ILI9341_BUFFER_SIZE * sizeof(u8), GFP_KERNEL);
+    if (!dev_data->display_buff)
+        return -ENOMEM;
+
+    spi_set_drvdata(client, dev_data);
+    dev_data->client = client;
 
     dev_data->dc_gpio = gpiod_get(&client->dev, "dc", GPIOD_OUT_HIGH);
     if (IS_ERR(dev_data->dc_gpio))
@@ -69,15 +88,19 @@ static int ili9341_probe(struct spi_device *client)
     }
 
     status = ili9341_init(dev_data);
-    if(status)
+    if (status)
     {
+        gpiod_put(dev_data->dc_gpio);
         dev_err(&client->dev, "error while initialising display hardware\n");
         return status;
     }
 
     dev_data->display_thread = kthread_create(display_thread, dev_data, "ili9341_kthread");
     if (!dev_data->display_thread)
+    {
+        gpiod_put(dev_data->dc_gpio);
         return -ECHILD;
+    }
 
     wake_up_process(dev_data->display_thread);
     dev_info(&client->dev, "probe successful\n");

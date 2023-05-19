@@ -4,10 +4,13 @@
 #include "display.h"
 #include "memory.h"
 
+#define ILI9341_DC_DATA             1
+#define ILI9341_DC_COMMAND          0
+
 static int ili9341_display_on(struct device_data *dev_data);
 static int ili9341_software_reset(struct device_data *dev_data);
-static int ili9341_send_command(struct device_data *dev_data, u8 *buff, u16 len);
-static int ili9341_send_data(struct device_data *dev_data, u8 *buff, u16 len);
+static int ili9341_send_command(struct device_data *dev_data, u8 *buff, size_t len);
+static int ili9341_send_data(struct device_data *dev_data, u8 *buff, size_t len);
 
 static const u8 display_init_sequence[] = {
     1, ILI9341_PWCTR1, 0x23,
@@ -21,23 +24,6 @@ static const u8 display_init_sequence[] = {
     3, ILI9341_DFUNCTR, 0x08, 0x82, 0x27,
     0x00,
 };
-
-void debug_pattern(struct device_data *dev_data)
-{
-    u8 start_cmd = 0x2C;
-    u8 test_buff[3] = {
-        0xaa,
-        0xaa,
-        0,
-    };
-    msleep(100);
-
-    ili9341_send_command(dev_data, &start_cmd, 1);
-    for(int i = 0; i < 57200; i++)
-    {
-        ili9341_send_data(dev_data, test_buff, 3);
-    }
-}
 
 int ili9341_init(struct device_data *dev_data)
 {
@@ -62,8 +48,20 @@ int ili9341_init(struct device_data *dev_data)
         buff += (cmd_len + 2);
     }
     status = ili9341_display_on(dev_data);
+    return status;
+}
 
-    debug_pattern(dev_data);
+int ili9341_send_display_buff(struct device_data *dev_data)
+{
+    int status;
+    u8 start_cmd;
+
+    status = 0;
+    start_cmd = 0x2C;
+    status = ili9341_send_command(dev_data, &start_cmd, 1);
+    if(status)
+        return status;
+    status = ili9341_send_data(dev_data, dev_data->display_buff, ILI9341_BUFFER_SIZE);
     return status;
 }
 
@@ -99,13 +97,13 @@ static int ili9341_software_reset(struct device_data *dev_data)
     return status;
 }
 
-static int ili9341_send_command(struct device_data *dev_data, u8 *buff, u16 len)
+static int ili9341_send_command(struct device_data *dev_data, u8 *buff, size_t len)
 {
     gpiod_set_value(dev_data->dc_gpio, ILI9341_DC_COMMAND);
     return spi_write(dev_data->client, buff, len);
 }
 
-static int ili9341_send_data(struct device_data *dev_data, u8 *buff, u16 len)
+static int ili9341_send_data(struct device_data *dev_data, u8 *buff, size_t len)
 {
     gpiod_set_value(dev_data->dc_gpio, ILI9341_DC_DATA);
     return spi_write(dev_data->client, buff, len);
