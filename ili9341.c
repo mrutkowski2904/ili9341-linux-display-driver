@@ -158,8 +158,9 @@ int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
     if (info->fix.visual == FB_VISUAL_TRUECOLOR && regno < ILI9341_PSEUDO_PALETTE_SIZE)
     {
         ((u32 *)(info->pseudo_palette))[regno] =
-            (red << info->var.red.offset) | (green << info->var.green.offset) |
-            (blue << info->var.blue.offset) | (transp << info->var.transp.offset);
+            ((red & 0x3F) << ILI9341_RED_OFFSET) 
+            | ((green & 0x3F) << ILI9341_GREEN_OFFSET) 
+            | ((blue & 0x3F) << ILI9341_BLUE_OFFSET);
         return 0;
     }
     return -EINVAL;
