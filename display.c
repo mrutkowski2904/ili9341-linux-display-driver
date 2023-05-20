@@ -10,6 +10,7 @@
 static int ili9341_display_on(struct device_data *dev_data);
 static int ili9341_software_reset(struct device_data *dev_data);
 static int ili9341_send_command(struct device_data *dev_data, u8 *buff, size_t len);
+static int ili9341_send_command_with_args(struct device_data *dev_data, u8 cmd, u8 *args, size_t args_len);
 static int ili9341_send_data(struct device_data *dev_data, u8 *buff, size_t len);
 
 static const u8 display_init_sequence[] = {
@@ -42,7 +43,7 @@ int ili9341_init(struct device_data *dev_data)
     while (*buff)
     {
         cmd_len = *buff;
-        status = ili9341_send_command(dev_data, (u8 *)buff + 1, cmd_len + 1);
+        status = ili9341_send_command_with_args(dev_data, *(buff + 1), (u8 *)buff + 2, cmd_len);
         if (status)
             return status;
         buff += (cmd_len + 2);
@@ -101,6 +102,16 @@ static int ili9341_send_command(struct device_data *dev_data, u8 *buff, size_t l
 {
     gpiod_set_value(dev_data->dc_gpio, ILI9341_DC_COMMAND);
     return spi_write(dev_data->client, buff, len);
+}
+
+static int ili9341_send_command_with_args(struct device_data *dev_data, u8 cmd, u8 *args, size_t args_len)
+{
+    int status;
+    status = ili9341_send_command(dev_data, &cmd, 1);
+    if (status)
+        return status;
+    status = ili9341_send_data(dev_data, args, args_len);
+    return status;
 }
 
 static int ili9341_send_data(struct device_data *dev_data, u8 *buff, size_t len)

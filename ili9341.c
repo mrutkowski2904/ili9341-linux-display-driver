@@ -10,6 +10,9 @@
 static int display_thread(void *data);
 static int ili9341_probe(struct spi_device *client);
 static void ili9341_remove(struct spi_device *client);
+int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
+                      unsigned blue, unsigned transp, struct fb_info *info);
+static void ili9341_configure_fb(struct device_data *dev_data);
 
 static struct of_device_id ili9341_driver_of_ids[] = {
     {
@@ -36,6 +39,7 @@ static struct spi_driver ili9341_spi_driver = {
 
 static struct fb_ops ili9341_fb_ops = {
     .owner = THIS_MODULE,
+    /* .fb_setcolreg = ili9341_setcolreg, */
     .fb_fillrect = cfb_fillrect,
     .fb_imageblit = cfb_imageblit,
     .fb_copyarea = cfb_copyarea,
@@ -48,7 +52,7 @@ static int display_thread(void *data)
 
     while (!kthread_should_stop())
     {
-        msleep(700);
+        msleep(100);
         if (ili9341_send_display_buff(dev_data))
         {
             dev_err(&dev_data->client->dev, "error occured while sending data to the display");
@@ -95,9 +99,27 @@ static int ili9341_probe(struct spi_device *client)
         return status;
     }
 
+    dev_data->framebuffer_info = framebuffer_alloc(0, &client->dev);
+    if (dev_data->framebuffer_info == NULL)
+    {
+        gpiod_put(dev_data->dc_gpio);
+        return -ENOMEM;
+    }
+
+    ili9341_configure_fb(dev_data);
+
+    if (register_framebuffer(dev_data->framebuffer_info))
+    {
+        framebuffer_release(dev_data->framebuffer_info);
+        gpiod_put(dev_data->dc_gpio);
+        dev_err(&client->dev, "error while registering framebuffer\n");
+        return -EINVAL;
+    }
+
     dev_data->display_thread = kthread_create(display_thread, dev_data, "ili9341_kthread");
     if (!dev_data->display_thread)
     {
+        framebuffer_release(dev_data->framebuffer_info);
         gpiod_put(dev_data->dc_gpio);
         return -ECHILD;
     }
@@ -114,7 +136,55 @@ static void ili9341_remove(struct spi_device *client)
 
     kthread_stop(dev_data->display_thread);
     gpiod_put(dev_data->dc_gpio);
+    unregister_framebuffer(dev_data->framebuffer_info);
+    framebuffer_release(dev_data->framebuffer_info);
     dev_info(&client->dev, "device removed\n");
+}
+
+int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
+                      unsigned blue, unsigned transp, struct fb_info *info)
+{
+    if (info->fix.visual == FB_VISUAL_TRUECOLOR)
+    {
+        ((u32 *)(info->pseudo_palette))[regno] =
+            (red << info->var.red.offset) | (green << info->var.green.offset) |
+            (blue << info->var.blue.offset) | (transp << info->var.transp.offset);
+    }
+    return 0;
+}
+
+static void ili9341_configure_fb(struct device_data *dev_data)
+{
+    struct fb_info *info;
+
+    info = dev_data->framebuffer_info;
+    info->screen_base = dev_data->display_buff;
+    info->screen_size = ILI9341_BUFFER_SIZE;
+    info->fbops = &ili9341_fb_ops;
+
+    info->fix.visual = FB_VISUAL_TRUECOLOR;
+    info->fix.type = FB_TYPE_PACKED_PIXELS;
+    info->fix.line_length = ILI9341_LINE_LENGTH;
+    info->fix.accel = FB_ACCEL_NONE;
+    sprintf(info->fix.id, "CUST_ILI9341");
+
+    info->var.xres = ILI9341_WIDTH;
+    info->var.yres = ILI9341_HEIGHT;
+    info->var.xres_virtual = ILI9341_WIDTH;
+    info->var.yres_virtual = ILI9341_HEIGHT;
+    info->var.bits_per_pixel = ILI9341_BITS_PER_PIXEL;
+    info->var.grayscale = 0;
+    info->var.activate = FB_ACTIVATE_NOW;
+
+    /* RRRRRR00 GGGGGG00 BBBBBB00 */
+    info->var.red.offset = 18;
+    info->var.red.length = ILI9341_COLOR_LENGTH;
+    info->var.green.offset = 10;
+    info->var.green.length = ILI9341_COLOR_LENGTH;
+    info->var.blue.offset = 2;
+    info->var.blue.length = ILI9341_COLOR_LENGTH;
+    info->var.transp.offset = 0;
+    info->var.transp.length = 0;
 }
 
 module_spi_driver(ili9341_spi_driver);
