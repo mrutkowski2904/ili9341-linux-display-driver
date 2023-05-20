@@ -18,7 +18,7 @@ static const u8 display_init_sequence[] = {
     1, ILI9341_PWCTR2, 0x10,
     2, ILI9341_VMCTR1, 0x3E, 0x28,
     1, ILI9341_VMCTR2, 0x86,
-    1, ILI9341_MADCTL, 0x48,
+    1, ILI9341_MADCTL, 0x40, /* RGB */
     1, ILI9341_VSCRSADD, 0x00,
     1, ILI9341_PIXFMT, 0x66, /* 18 bits per pixel */
     2, ILI9341_FRMCTR1, 0x00, 0x18,
