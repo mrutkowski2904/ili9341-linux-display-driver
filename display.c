@@ -68,13 +68,15 @@ int ili9341_send_display_buff(struct device_data *dev_data)
 
 static int ili9341_display_on(struct device_data *dev_data)
 {
-    int status = 0;
+    int i;
+    int status;
     u8 on_sequence[] = {
         ILI9341_SLPOUT,
         ILI9341_DISPON,
     };
+    status = 0;
 
-    for (int i = 0; i < (sizeof(on_sequence) / sizeof(on_sequence[0])); i++)
+    for (i = 0; i < (sizeof(on_sequence) / sizeof(on_sequence[0])); i++)
     {
         status = ili9341_send_command(dev_data, &on_sequence[i], 1);
         if (status)

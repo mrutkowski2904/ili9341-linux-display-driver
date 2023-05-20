@@ -9,7 +9,7 @@
 
 static int display_thread(void *data);
 static int ili9341_probe(struct spi_device *client);
-static void ili9341_remove(struct spi_device *client);
+static int ili9341_remove(struct spi_device *client);
 int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
                       unsigned blue, unsigned transp, struct fb_info *info);
 int ili9341_check_var(struct fb_var_screeninfo *var, struct fb_info *info);
@@ -138,7 +138,7 @@ static int ili9341_probe(struct spi_device *client)
     return 0;
 }
 
-static void ili9341_remove(struct spi_device *client)
+static int ili9341_remove(struct spi_device *client)
 {
     struct device_data *dev_data;
     dev_data = spi_get_drvdata(client);
@@ -149,6 +149,7 @@ static void ili9341_remove(struct spi_device *client)
     fb_dealloc_cmap(&dev_data->framebuffer_info->cmap);
     framebuffer_release(dev_data->framebuffer_info);
     dev_info(&client->dev, "device removed\n");
+    return 0;
 }
 
 int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,

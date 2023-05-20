@@ -1,0 +1,5 @@
+config BR2_PACKAGE_ILI9341_MODULE
+        bool "ili9341"
+        depends on BR2_LINUX_KERNEL
+        help
+                Custom framebuffer driver for ili9341 display
