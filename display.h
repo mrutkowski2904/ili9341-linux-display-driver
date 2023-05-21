@@ -13,9 +13,9 @@
 #define ILI9341_BUFFER_SIZE         (ILI9341_HEIGHT * ILI9341_WIDTH * ILI9341_BYTES_PER_PIXEL)
 #define ILI9341_LINE_LENGTH         (ILI9341_WIDTH * ILI9341_BYTES_PER_PIXEL)
 
-#define ILI9341_RED_OFFSET          2
+#define ILI9341_RED_OFFSET          18
 #define ILI9341_GREEN_OFFSET        10
-#define ILI9341_BLUE_OFFSET         18
+#define ILI9341_BLUE_OFFSET         2
 
 int ili9341_init(struct device_data *dev_data);
 int ili9341_send_display_buff(struct device_data *dev_data);

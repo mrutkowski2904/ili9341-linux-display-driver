@@ -1,1 +1,9 @@
 .vscode
+*.dtbo
+*.cmd
+*.mod
+*.mod.*
+*.order
+*.symvers
+*.ko
+*.o
