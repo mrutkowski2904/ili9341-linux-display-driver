@@ -57,10 +57,7 @@ static int display_thread(void *data)
     while (!kthread_should_stop())
     {
         if (ili9341_send_display_buff(dev_data))
-        {
             dev_err(&dev_data->client->dev, "error occured while sending data to the display");
-            break;
-        }
     }
     return 0;
 }
@@ -162,7 +159,7 @@ static void ili9341_remove(struct spi_device *client)
     fb_dealloc_cmap(&dev_data->framebuffer_info->cmap);
     framebuffer_release(dev_data->framebuffer_info);
     if (dev_data->dma_support)
-        dma_unmap_single(&dev_data->dma_dev, dev_data->dma_display_buff, ILI9341_BUFFER_SIZE, DMA_TO_DEVICE);
+        dma_unmap_single(dev_data->dma_dev, dev_data->dma_display_buff, ILI9341_BUFFER_SIZE, DMA_TO_DEVICE);
     dev_info(&client->dev, "device removed\n");
 }
 
