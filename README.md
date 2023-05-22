@@ -4,6 +4,7 @@ The driver uses SPI for communication with the display and device tree for bindi
 <br>
 Overview:
 * 18-bit color depth
+* Uses DMA
 * Uses standard SPI interface and one GPIO. GPIO is used to differentiate between command and data transfer
 * Uses `fbdev` kernel framework, display is exposed to userspace as `/dev/fbX`
 * Tested on BeagleBone Black Rev. C and Raspberry Pi 3A+. Additional device tree definitions must be provided when using different platforms.

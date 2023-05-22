@@ -12,6 +12,7 @@ static int ili9341_software_reset(struct device_data *dev_data);
 static int ili9341_send_command(struct device_data *dev_data, u8 *buff, size_t len);
 static int ili9341_send_command_with_args(struct device_data *dev_data, u8 cmd, u8 *args, size_t args_len);
 static int ili9341_send_data(struct device_data *dev_data, u8 *buff, size_t len);
+static int ili9341_send_display_buff_dma(struct device_data *dev_data);
 
 static const u8 display_init_sequence[] = {
     1, ILI9341_PWCTR1, 0x23,
@@ -62,7 +63,10 @@ int ili9341_send_display_buff(struct device_data *dev_data)
     status = ili9341_send_command(dev_data, &start_cmd, 1);
     if(status)
         return status;
-    status = ili9341_send_data(dev_data, dev_data->display_buff, ILI9341_BUFFER_SIZE);
+    if(dev_data->dma_support)
+        status = ili9341_send_display_buff_dma(dev_data);
+    else
+        status = ili9341_send_data(dev_data, dev_data->display_buff, ILI9341_BUFFER_SIZE);
     return status;
 }
 
@@ -120,4 +124,20 @@ static int ili9341_send_data(struct device_data *dev_data, u8 *buff, size_t len)
 {
     gpiod_set_value(dev_data->dc_gpio, ILI9341_DC_DATA);
     return spi_write(dev_data->client, buff, len);
+}
+
+static int ili9341_send_display_buff_dma(struct device_data *dev_data)
+{
+    struct spi_message buff_message;
+    struct spi_transfer buff_transfer;
+
+    spi_message_init(&buff_message);
+    buff_message.is_dma_mapped = 1;
+    buff_transfer.tx_buf = dev_data->display_buff;
+    buff_transfer.len = ILI9341_BUFFER_SIZE;
+    buff_transfer.tx_dma = dev_data->dma_display_buff;
+
+    spi_message_add_tail(&buff_transfer, &buff_message);
+    gpiod_set_value(dev_data->dc_gpio, ILI9341_DC_DATA);
+    return spi_sync(dev_data->client, &buff_message);
 }

@@ -3,6 +3,7 @@
 #include <linux/of.h>
 #include <linux/delay.h>
 #include <linux/fb.h>
+#include <linux/dma-mapping.h>
 
 #include "ili9341.h"
 #include "display.h"
@@ -10,9 +11,10 @@
 static int display_thread(void *data);
 static int ili9341_probe(struct spi_device *client);
 static void ili9341_remove(struct spi_device *client);
-int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
-                      unsigned blue, unsigned transp, struct fb_info *info);
-int ili9341_check_var(struct fb_var_screeninfo *var, struct fb_info *info);
+static int ili9341_try_configure_dma(struct device_data *dev_data);
+static int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
+                             unsigned blue, unsigned transp, struct fb_info *info);
+static int ili9341_check_var(struct fb_var_screeninfo *var, struct fb_info *info);
 static void ili9341_configure_fb(struct device_data *dev_data);
 
 static struct of_device_id ili9341_driver_of_ids[] = {
@@ -78,12 +80,23 @@ static int ili9341_probe(struct spi_device *client)
     if (!dev_data)
         return -ENOMEM;
 
-    dev_data->display_buff = devm_kzalloc(&client->dev, ILI9341_BUFFER_SIZE * sizeof(u8), GFP_KERNEL);
-    if (!dev_data->display_buff)
-        return -ENOMEM;
-
     spi_set_drvdata(client, dev_data);
     dev_data->client = client;
+
+    dev_data->display_buff = devm_kzalloc(&client->dev, ILI9341_BUFFER_SIZE, GFP_KERNEL | GFP_DMA);
+    if (!dev_data->display_buff)
+            return -ENOMEM;
+
+    if (ili9341_try_configure_dma(dev_data))
+    {
+        dev_data->dma_support = false;
+        dev_info(&client->dev, "DMA not supported\n");
+    }
+    else
+    {
+        dev_data->dma_support = true;
+        dev_info(&client->dev, "using DMA\n");
+    }
 
     dev_data->dc_gpio = gpiod_get(&client->dev, "dc", GPIOD_OUT_HIGH);
     if (IS_ERR(dev_data->dc_gpio))
@@ -148,24 +161,40 @@ static void ili9341_remove(struct spi_device *client)
     unregister_framebuffer(dev_data->framebuffer_info);
     fb_dealloc_cmap(&dev_data->framebuffer_info->cmap);
     framebuffer_release(dev_data->framebuffer_info);
+    if (dev_data->dma_support)
+        dma_unmap_single(&dev_data->dma_dev, dev_data->dma_display_buff, ILI9341_BUFFER_SIZE, DMA_TO_DEVICE);
     dev_info(&client->dev, "device removed\n");
 }
 
-int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
-                      unsigned blue, unsigned transp, struct fb_info *info)
+static int ili9341_try_configure_dma(struct device_data *dev_data)
+{
+    int status;
+    struct device *dev;
+    status = 0;
+    dev = dev_data->client->master->dev.parent;
+    dev_data->dma_dev = dev;
+
+    if (!dev->dma_mask)
+		return 0;
+
+    dev_data->dma_display_buff = dma_map_single(dev, dev_data->display_buff, ILI9341_BUFFER_SIZE, DMA_TO_DEVICE);
+    status = dma_mapping_error(dev, dev_data->dma_display_buff);
+    return status;
+}
+
+static int ili9341_setcolreg(unsigned regno, unsigned red, unsigned green,
+                             unsigned blue, unsigned transp, struct fb_info *info)
 {
     if (info->fix.visual == FB_VISUAL_TRUECOLOR && regno < ILI9341_PSEUDO_PALETTE_SIZE)
     {
         ((u32 *)(info->pseudo_palette))[regno] =
-            ((red & 0x3F) << ILI9341_RED_OFFSET) 
-            | ((green & 0x3F) << ILI9341_GREEN_OFFSET) 
-            | ((blue & 0x3F) << ILI9341_BLUE_OFFSET);
+            ((red & 0x3F) << ILI9341_RED_OFFSET) | ((green & 0x3F) << ILI9341_GREEN_OFFSET) | ((blue & 0x3F) << ILI9341_BLUE_OFFSET);
         return 0;
     }
     return -EINVAL;
 }
 
-int ili9341_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
+static int ili9341_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 {
     var->xres = ILI9341_WIDTH;
     var->yres = ILI9341_HEIGHT;
